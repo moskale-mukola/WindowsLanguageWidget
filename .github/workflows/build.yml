@@ -1,4 +1,4 @@
-name: Build and Release
+name: Release
 
 on:
   push:
@@ -15,29 +15,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install AutoHotkey v2
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "https://www.autohotkey.com/download/ahk-v2.exe" -OutFile "ahk-setup.exe"
-          Start-Process -FilePath ".\ahk-setup.exe" -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+      # windows-latest already ships MSVC build tools + the WebView2 runtime,
+      # so no heavy toolchain install is needed here.
+      - name: Install Rust (stable, MSVC)
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Ahk2Exe compiler
-        shell: pwsh
-        run: |
-          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/AutoHotkey/Ahk2Exe/releases/latest"
-          $asset = $release.assets | Where-Object { $_.name -like "*.zip" } | Select-Object -First 1
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "Ahk2Exe.zip"
-          Expand-Archive -Path "Ahk2Exe.zip" -DestinationPath "Ahk2Exe" -Force
-
-      - name: Compile LangWidget.ahk to .exe
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path build | Out-Null
-          $ahk2exe = (Get-ChildItem -Path "Ahk2Exe" -Filter "Ahk2Exe.exe" -Recurse | Select-Object -First 1).FullName
-          $base = "$env:ProgramFiles\AutoHotkey\v2\AutoHotkey64.exe"
-          & $ahk2exe /in src\LangWidget.ahk /out build\LangWidget.exe /base $base /silent verbose
-
-      - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          files: build/LangWidget.exe
+          workspaces: "./src-tauri -> target"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install frontend/CLI deps
+        run: npm install
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "KeyboardLangLock ${{ github.ref_name }}"
+          releaseDraft: false
+          prerelease: false

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KeyboardLangLock Settings</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #1b1b1d; --panel: #242427; --fg: #e8e8ea; --muted: #9a9aa0;
+      --accent: #ff6b6b; --line: #33333a;
+    }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px; padding: 18px 20px;
+      user-select: none;
+    }
+    h1 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+    .field { margin-bottom: 18px; }
+    .field label { display: flex; justify-content: space-between; color: var(--muted); margin-bottom: 8px; }
+    .field label .val { color: var(--fg); font-variant-numeric: tabular-nums; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+    .swatches { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .swatch { width: 30px; height: 30px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; }
+    .swatch.active { border-color: var(--accent); }
+    .color-row { display: flex; gap: 8px; align-items: center; }
+    .color-row input[type="text"] {
+      flex: 1; background: var(--panel); border: 1px solid var(--line);
+      color: var(--fg); border-radius: 6px; padding: 6px 8px; font-family: monospace;
+    }
+    input[type="color"] { width: 38px; height: 34px; background: none; border: none; cursor: pointer; }
+
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+    .toggle-row span { color: var(--fg); }
+    input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
+
+    .hint { color: var(--muted); font-size: 12px; margin-top: 14px; line-height: 1.5; border-top: 1px solid var(--line); padding-top: 12px; }
+  </style>
+</head>
+<body>
+  <h1>Widget settings</h1>
+
+  <div class="field">
+    <label>Size <span class="val" id="sizeVal">100%</span></label>
+    <input type="range" id="size" min="70" max="200" step="5" />
+  </div>
+
+  <div class="field">
+    <label>Opacity <span class="val" id="opacityVal">100%</span></label>
+    <input type="range" id="opacity" min="20" max="100" step="5" />
+  </div>
+
+  <div class="field">
+    <label>Corner radius <span class="val" id="radiusVal">16px</span></label>
+    <input type="range" id="radius" min="0" max="30" step="1" />
+  </div>
+
+  <div class="field">
+    <label>Background color</label>
+    <div class="swatches" id="swatches"></div>
+    <div class="color-row">
+      <input type="color" id="colorPicker" />
+      <input type="text" id="hex" spellcheck="false" maxlength="7" />
+    </div>
+  </div>
+
+  <div class="toggle-row">
+    <span>Always on top</span>
+    <input type="checkbox" id="aot" />
+  </div>
+
+  <div class="hint">Changes apply instantly. Autostart is in the tray-icon menu.</div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

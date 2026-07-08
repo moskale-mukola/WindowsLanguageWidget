@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KeyboardLangLock</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      user-select: none;
+      cursor: default;
+      font-family: "Segoe UI", system-ui, sans-serif;
+    }
+    body { display: flex; align-items: center; justify-content: center; }
+
+    /* The pill. font-size drives everything (scale); inner sizes are in em. */
+    .card {
+      --fg: #ffffff;
+      --accent: #ff6b6b;
+      font-size: 16px;                 /* replaced at runtime by scale */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.7em 0.9em;
+      border-radius: 1em;              /* replaced at runtime by radius */
+      background: rgba(30, 30, 30, 1); /* replaced at runtime by color+opacity */
+      color: var(--fg);
+      line-height: 1;
+      white-space: nowrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.4em;
+      color: var(--fg);
+      transition: background-color .12s ease, opacity .12s ease, color .12s ease;
+    }
+    .btn:hover { background: rgba(255,255,255,0.12); }
+    .btn svg { display: block; }
+
+    /* Single row: language | lock | (pin above settings) */
+    .main { display: flex; align-items: center; gap: 0.5em; }
+    .lang {
+      font-size: 1.7em;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 0 0.1em;
+      min-width: 1.5em;
+      text-align: center;
+    }
+    .lock-btn { width: 1.9em; height: 1.9em; opacity: 0.9; }
+    .lock-btn svg { width: 1.2em; height: 1.2em; }
+
+    /* Pin (top) + settings (bottom), stacked to match the lock's height */
+    .stack {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 1.9em;
+    }
+    .stack .btn { width: 1.5em; height: 0.9em; opacity: 0.6; }
+    .stack .btn:hover { opacity: 1; }
+    .stack .btn svg { width: 0.75em; height: 0.75em; }
+
+    /* Locked state */
+    .card.locked .lang { color: var(--accent); }
+    .card.locked .lock-btn { color: var(--accent); opacity: 1; }
+
+    /* Pin active (position locked) */
+    .pin-btn .pin-filled { display: none; }
+    .card.pinned .pin-btn .pin-outline { display: none; }
+    .card.pinned .pin-btn .pin-filled { display: block; color: var(--accent); opacity: 1; }
+
+    /* Lock icon variants */
+    .lock-btn .lock-closed { display: none; }
+    .card.locked .lock-btn .lock-open { display: none; }
+    .card.locked .lock-btn .lock-closed { display: block; }
+  </style>
+</head>
+<body>
+  <div class="card" id="card" data-tauri-drag-region>
+    <!-- Single row: language | lock | (pin above settings) -->
+    <div class="main">
+      <div class="lang" id="lang">EN</div>
+
+      <div class="btn lock-btn" id="lock" title="Lock layout">
+        <svg class="lock-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="11" width="14" height="10" rx="2"/>
+          <path d="M8 11V7a4 4 0 0 1 7.9-1"/>
+        </svg>
+        <svg class="lock-closed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="5" y="11" width="14" height="10" rx="2"/>
+          <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+        </svg>
+      </div>
+
+      <div class="stack">
+        <div class="btn pin-btn" id="pin" title="Lock position">
+          <svg class="pin-outline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10z"/>
+            <circle cx="12" cy="11" r="2"/>
+          </svg>
+          <svg class="pin-filled" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <path d="M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10z"/>
+            <circle cx="12" cy="11" r="2" fill="#1e1e1e"/>
+          </svg>
+        </div>
+        <div class="btn" id="gear" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="widget.js"></script>
+</body>
+</html>
