@@ -5,23 +5,56 @@
 //!   - read the *foreground window's* layout (not this app's)
 //!   - switch it via WM_INPUTLANGCHANGEREQUEST
 //!   - map an HKL's low word (an LCID) to an ISO-639 abbreviation (EN/UK/…)
+//!
+//! Two things matter for reliability against real games:
+//!   - the top-level foreground window is not always the one that owns
+//!     keyboard focus (it may be a child control) — GetGUIThreadInfo's
+//!     hwndFocus is the window that actually needs the message.
+//!   - our own windows (widget/settings) can become foreground (e.g. when
+//!     the settings panel is clicked); callers should exclude those HWNDs
+//!     before treating GetForegroundWindow()'s result as "the target app".
 
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Globalization::{GetLocaleInfoW, LOCALE_SISO639LANGNAME};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyboardLayout;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowThreadProcessId, PostMessageW, WM_INPUTLANGCHANGEREQUEST,
+    GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, PostMessageW, GUITHREADINFO,
+    WM_INPUTLANGCHANGEREQUEST,
 };
 
-/// HKL of the foreground window, as a plain integer (0 if none).
-pub fn foreground_hkl() -> usize {
+/// Raw foreground window handle, as an integer (0 if none). Callers should
+/// check this against their own windows before treating it as "the app".
+pub fn foreground_hwnd_raw() -> isize {
+    unsafe { GetForegroundWindow().0 as isize }
+}
+
+/// HKL of the given window's thread (0 if the handle is null).
+pub fn hwnd_hkl(hwnd_val: isize) -> usize {
+    if hwnd_val == 0 {
+        return 0;
+    }
     unsafe {
-        let hwnd = GetForegroundWindow();
-        if hwnd.0.is_null() {
-            return 0;
-        }
+        let hwnd = HWND(hwnd_val as *mut _);
         let tid = GetWindowThreadProcessId(hwnd, None);
         GetKeyboardLayout(tid).0 as usize
+    }
+}
+
+/// The window that actually owns keyboard focus within `hwnd`'s thread (this
+/// may be a child control, not `hwnd` itself). Falls back to `hwnd` if the
+/// thread info can't be read.
+fn focus_hwnd_for(hwnd: HWND) -> HWND {
+    unsafe {
+        let tid = GetWindowThreadProcessId(hwnd, None);
+        let mut info = GUITHREADINFO {
+            cbSize: std::mem::size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        if GetGUIThreadInfo(tid, &mut info).is_ok() && !info.hwndFocus.0.is_null() {
+            info.hwndFocus
+        } else {
+            hwnd
+        }
     }
 }
 
@@ -39,21 +72,22 @@ pub fn lang_of_hkl(hkl: usize) -> String {
     String::from_utf16_lossy(&buf[..(n as usize).saturating_sub(1)]).to_uppercase()
 }
 
-/// Request the foreground window to switch to the given layout.
-pub fn apply_hkl(hkl: usize) {
+/// Request the given window to switch to the given layout. Posts to the
+/// actual focused control within that window's thread, not just the
+/// top-level window, since many apps only react on the control that has
+/// keyboard focus.
+pub fn apply_hkl_to(hwnd_val: isize, hkl: usize) {
+    if hwnd_val == 0 {
+        return;
+    }
     unsafe {
-        let hwnd = GetForegroundWindow();
-        if !hwnd.0.is_null() {
-            let _ = PostMessageW(
-                hwnd,
-                WM_INPUTLANGCHANGEREQUEST,
-                WPARAM(0),
-                LPARAM(hkl as isize),
-            );
-        }
+        let hwnd = HWND(hwnd_val as *mut _);
+        let target = focus_hwnd_for(hwnd);
+        let _ = PostMessageW(
+            target,
+            WM_INPUTLANGCHANGEREQUEST,
+            WPARAM(0),
+            LPARAM(hkl as isize),
+        );
     }
 }
-
-// HWND is used only through the calls above; keep the import meaningful.
-#[allow(dead_code)]
-fn _assert_hwnd(_: HWND) {}

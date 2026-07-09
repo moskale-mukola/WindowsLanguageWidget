@@ -36,29 +36,69 @@
     .toggle-row span { color: var(--fg); }
     input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
+    select {
+      width: 100%; background: var(--panel); border: 1px solid var(--line);
+      color: var(--fg); border-radius: 6px; padding: 8px; font-family: inherit; font-size: 13px;
+    }
+
+    textarea {
+      width: 100%; background: var(--panel); border: 1px solid var(--line);
+      color: var(--fg); border-radius: 6px; padding: 8px; font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px; resize: vertical; min-height: 90px;
+    }
+
+    button {
+      width: 100%; background: var(--panel); border: 1px solid var(--line);
+      color: var(--fg); border-radius: 6px; padding: 9px; font-family: inherit; font-size: 13px;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    #resetBtn { color: var(--accent); }
+
     .hint { color: var(--muted); font-size: 12px; margin-top: 14px; line-height: 1.5; border-top: 1px solid var(--line); padding-top: 12px; }
+    .warn { color: #e6a23c; font-size: 11px; line-height: 1.5; margin: 2px 0 10px; }
+    .warn code { font-family: Consolas, monospace; font-size: 10px; }
   </style>
 </head>
 <body>
-  <h1>Widget settings</h1>
+  <div class="field">
+    <label data-i18n="ui_lang">Interface language</label>
+    <select id="uiLang">
+      <option value="en">English</option>
+      <option value="uk">Українська</option>
+    </select>
+  </div>
+
+  <h1 data-i18n="h_widget">Widget settings</h1>
 
   <div class="field">
-    <label>Size <span class="val" id="sizeVal">100%</span></label>
+    <label data-i18n="theme">Theme</label>
+    <select id="theme">
+      <option value="default" data-i18n="theme_default">Default</option>
+      <option value="win11-light" data-i18n="theme_win11_light">Windows 11 Light</option>
+      <option value="win11-dark" data-i18n="theme_win11_dark">Windows 11 Dark</option>
+      <option value="minimal" data-i18n="theme_minimal">Minimal</option>
+      <option value="futuristic" data-i18n="theme_futuristic">Futuristic</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label><span data-i18n="size">Size</span> <span class="val" id="sizeVal">100%</span></label>
     <input type="range" id="size" min="70" max="200" step="5" />
   </div>
 
   <div class="field">
-    <label>Opacity <span class="val" id="opacityVal">100%</span></label>
+    <label><span data-i18n="opacity">Opacity</span> <span class="val" id="opacityVal">100%</span></label>
     <input type="range" id="opacity" min="20" max="100" step="5" />
   </div>
 
   <div class="field">
-    <label>Corner radius <span class="val" id="radiusVal">16px</span></label>
+    <label><span data-i18n="radius">Corner radius</span> <span class="val" id="radiusVal">16px</span></label>
     <input type="range" id="radius" min="0" max="30" step="1" />
   </div>
 
   <div class="field">
-    <label>Background color</label>
+    <label data-i18n="bg_color">Background color</label>
     <div class="swatches" id="swatches"></div>
     <div class="color-row">
       <input type="color" id="colorPicker" />
@@ -67,12 +107,58 @@
   </div>
 
   <div class="toggle-row">
-    <span>Always on top</span>
+    <span data-i18n="aot">Always on top</span>
     <input type="checkbox" id="aot" />
   </div>
 
-  <div class="hint">Changes apply instantly. Autostart is in the tray-icon menu.</div>
+  <div class="toggle-row">
+    <span data-i18n="autostart">Start with Windows</span>
+    <input type="checkbox" id="autostart" />
+  </div>
 
+  <div class="toggle-row">
+    <span data-i18n="block_hotkeys" title="While locked, Alt+Shift / Ctrl+Shift won't switch the layout at all. Win+Space and the taskbar indicator still work.">Block layout hotkeys while locked</span>
+    <input type="checkbox" id="blockHotkeys" />
+  </div>
+
+  <div class="toggle-row">
+    <span data-i18n="registry_block">Disable system hotkey while locked</span>
+    <input type="checkbox" id="registryBlock" />
+  </div>
+  <div class="warn" data-i18n="registry_warn">
+    ⚠ Experimental. Temporarily edits the Windows registry (<code>HKCU\Keyboard Layout\Toggle</code>) while
+    locked — the most reliable block for games. Your original values are restored on unlock, exit, and next
+    launch/logon after a crash. If Alt+Shift ever stays off: Settings → Time &amp; language → Typing →
+    Advanced keyboard settings → Input language hot keys.
+  </div>
+
+  <h1 style="margin-top: 24px;" data-i18n="h_buttons">Visible buttons</h1>
+  <div class="toggle-row">
+    <span data-i18n="btn_lock">Lock button</span>
+    <input type="checkbox" id="showLock" />
+  </div>
+  <div class="toggle-row">
+    <span data-i18n="btn_pin">Pin button</span>
+    <input type="checkbox" id="showPin" />
+  </div>
+  <div class="toggle-row">
+    <span data-i18n="btn_settings">Settings button</span>
+    <input type="checkbox" id="showSettings" />
+  </div>
+
+  <h1 style="margin-top: 24px;" data-i18n="h_css">Custom CSS</h1>
+  <div class="field">
+    <label data-i18n="css_label">Advanced styling</label>
+    <textarea id="customCss" spellcheck="false" data-i18n-placeholder="css_placeholder" placeholder="/* e.g. #card { font-family: monospace; } */"></textarea>
+  </div>
+
+  <div class="field" style="margin-top: 24px;">
+    <button id="resetBtn" data-i18n="reset">Reset to defaults</button>
+  </div>
+
+  <div class="hint" data-i18n="hint">Changes apply instantly. Right-click the widget to open settings.</div>
+
+  <script src="i18n.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

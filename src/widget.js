@@ -1,12 +1,14 @@
 const { invoke } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
 const { getCurrentWindow, LogicalPosition } = window.__TAURI__.window;
+const { Menu, MenuItem, CheckMenuItem } = window.__TAURI__.menu;
 
 const card = document.getElementById("card");
 const langEl = document.getElementById("lang");
 const pinBtn = document.getElementById("pin");
 const lockBtn = document.getElementById("lock");
 const gearBtn = document.getElementById("gear");
+const customCssEl = document.getElementById("custom-css");
 
 let settings = null;
 
@@ -25,9 +27,17 @@ function applyAppearance(s) {
   card.style.fontSize = base + "px";
   card.style.borderRadius = (s.radius || 0) * (s.scale || 1) + "px";
   card.style.background = hexToRgba(s.bg_color || "1E1E1E", s.opacity ?? 100);
+  card.dataset.theme = s.theme || "default";
   card.classList.toggle("pinned", !!s.pos_locked);
   updateDragRegion(!!s.pos_locked);
-  // Resize the OS window to fit the pill once the DOM has laid out.
+  lockBtn.style.display = (s.show_lock !== false) ? "flex" : "none";
+  if (document.querySelector(".stack")) {
+    const stack = document.querySelector(".stack");
+    stack.style.display = ((s.show_pin !== false) || (s.show_settings !== false)) ? "flex" : "none";
+    pinBtn.style.display = (s.show_pin !== false) ? "flex" : "none";
+    gearBtn.style.display = (s.show_settings !== false) ? "flex" : "none";
+  }
+  customCssEl.textContent = s.custom_css || "";
   requestAnimationFrame(fitWindow);
 }
 
@@ -48,6 +58,13 @@ function applyStatus(lang, locked) {
   langEl.textContent = lang;
   card.classList.toggle("locked", !!locked);
 }
+
+// ---------- Context menu ----------
+card.addEventListener("contextmenu", async (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  invoke("open_settings");
+});
 
 // ---------- Actions ----------
 lockBtn.addEventListener("click", async (e) => {

@@ -80,7 +80,51 @@
     .lock-btn .lock-closed { display: none; }
     .card.locked .lock-btn .lock-open { display: none; }
     .card.locked .lock-btn .lock-closed { display: block; }
+
+    /* ---------- Themes ----------
+       Each theme sets its own look via [data-theme] on .card; appearance
+       sliders (size/opacity/radius/color) still apply on top of these. */
+    .card[data-theme="win11-light"] {
+      --fg: #1b1b1b;
+      border: 1px solid rgba(0, 0, 0, .08);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
+    }
+    .card[data-theme="win11-light"] .btn:hover { background: rgba(0, 0, 0, .06); }
+
+    .card[data-theme="win11-dark"] {
+      border: 1px solid rgba(255, 255, 255, .08);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+    }
+
+    .card[data-theme="minimal"] {
+      border: none;
+      box-shadow: none;
+    }
+    .card[data-theme="minimal"] .lang { font-weight: 600; }
+    .card[data-theme="minimal"]:not(.locked) .lock-btn { opacity: .35; }
+    .card[data-theme="minimal"]:hover .lock-btn { opacity: 1; }
+    .card[data-theme="minimal"]:not(.pinned) .pin-btn { opacity: .3; }
+    .card[data-theme="minimal"] #gear { opacity: .3; }
+    .card[data-theme="minimal"]:hover .stack .btn { opacity: .9; }
+
+    .card[data-theme="futuristic"] {
+      font-family: "Cascadia Mono", Consolas, monospace;
+      letter-spacing: .04em;
+      border: 1px solid rgba(0, 229, 255, .5);
+      box-shadow: 0 0 12px rgba(0, 229, 255, .35), inset 0 0 8px rgba(0, 229, 255, .08);
+    }
+    .card[data-theme="futuristic"] .lang { color: #00e5ff; text-shadow: 0 0 8px rgba(0, 229, 255, .8); }
+    .card[data-theme="futuristic"].locked {
+      box-shadow: 0 0 16px rgba(255, 107, 107, .6), inset 0 0 10px rgba(255, 107, 107, .15);
+    }
+    .card[data-theme="futuristic"].locked .lang { text-shadow: 0 0 8px rgba(255, 107, 107, .8); }
+    /* Futuristic rearranges controls into a column: language on top,
+       lock/pin/gear in a row underneath. */
+    .card[data-theme="futuristic"] .main { flex-direction: column; gap: .35em; }
+    .card[data-theme="futuristic"] .stack { flex-direction: row; height: auto; gap: .5em; }
+    .card[data-theme="futuristic"] .stack .btn { width: 1.3em; height: 1.3em; }
   </style>
+  <style id="custom-css"></style>
 </head>
 <body>
   <div class="card" id="card" data-tauri-drag-region>
