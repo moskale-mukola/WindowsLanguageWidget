@@ -4,7 +4,7 @@
 mod keyboard;
 
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -14,10 +14,20 @@ use tauri::{AppHandle, Emitter, LogicalSize, Manager, State, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
 
 // ---------- Shared runtime state (used by the enforcement thread) ----------
-#[derive(Default)]
 struct Lock {
     layout_locked: bool,
-    target: usize, // HKL value to hold while locked
+    target: usize,
+    last_enforce: Instant,
+}
+
+impl Default for Lock {
+    fn default() -> Self {
+        Lock {
+            layout_locked: false,
+            target: 0,
+            last_enforce: Instant::now(),
+        }
+    }
 }
 
 struct AppState {
@@ -95,15 +105,6 @@ fn get_status(state: State<'_, Arc<AppState>>) -> serde_json::Value {
     json!({ "lang": keyboard::lang_of_hkl(hkl), "locked": s.layout_locked })
 }
 
-#[tauri::command]
-fn switch_layout(state: State<'_, Arc<AppState>>) -> String {
-    let hkl = keyboard::switch_next();
-    let mut s = state.lock.lock().unwrap();
-    if s.layout_locked {
-        s.target = hkl; // manual switch retargets the lock
-    }
-    keyboard::lang_of_hkl(hkl)
-}
 
 #[tauri::command]
 fn toggle_lock(state: State<'_, Arc<AppState>>) -> bool {
@@ -180,7 +181,6 @@ fn main() {
             get_settings,
             save_settings,
             get_status,
-            switch_layout,
             toggle_lock,
             set_always_on_top,
             resize_widget,
@@ -253,20 +253,24 @@ fn main() {
                 .build(app)?;
 
             // Background thread: enforce the lock and push layout updates.
-            // Only emits when the (lang, locked) pair actually changes, so the
-            // UI isn't re-rendered ~7x/second (that caused visible flicker).
+            // Only emits when the (lang, locked) pair actually changes.
+            // Throttles lock enforcement to 500ms to prevent infinite loops with
+            // programs that also react to PostMessageW.
             let st = state.clone();
             std::thread::spawn(move || {
                 let mut last: Option<(String, bool)> = None;
                 loop {
-                    let (locked, target) = {
+                    let (locked, target, should_enforce) = {
                         let s = st.lock.lock().unwrap();
-                        (s.layout_locked, s.target)
+                        let can_enforce = s.last_enforce.elapsed() > Duration::from_millis(500);
+                        (s.layout_locked, s.target, can_enforce && s.layout_locked && s.target != 0)
                     };
-                    if locked && target != 0 {
+                    if should_enforce {
                         let cur = keyboard::foreground_hkl();
                         if cur != 0 && (cur & 0xFFFF) != (target & 0xFFFF) {
                             keyboard::apply_hkl(target);
+                            let mut s = st.lock.lock().unwrap();
+                            s.last_enforce = Instant::now();
                         }
                     }
                     let hkl = if locked {

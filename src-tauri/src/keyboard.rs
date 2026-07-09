@@ -8,7 +8,7 @@
 
 use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Globalization::{GetLocaleInfoW, LOCALE_SISO639LANGNAME};
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyboardLayout, GetKeyboardLayoutList, HKL};
+use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyboardLayout;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowThreadProcessId, PostMessageW, WM_INPUTLANGCHANGEREQUEST,
 };
@@ -39,20 +39,6 @@ pub fn lang_of_hkl(hkl: usize) -> String {
     String::from_utf16_lossy(&buf[..(n as usize).saturating_sub(1)]).to_uppercase()
 }
 
-/// All installed layouts, in the system's own order (may contain duplicates
-/// for the same language — that mirrors the OS list and Alt+Shift cycling).
-pub fn layout_list() -> Vec<usize> {
-    unsafe {
-        let count = GetKeyboardLayoutList(None);
-        if count <= 0 {
-            return Vec::new();
-        }
-        let mut list = vec![HKL::default(); count as usize];
-        GetKeyboardLayoutList(Some(&mut list));
-        list.iter().map(|h| h.0 as usize).collect()
-    }
-}
-
 /// Request the foreground window to switch to the given layout.
 pub fn apply_hkl(hkl: usize) {
     unsafe {
@@ -66,22 +52,6 @@ pub fn apply_hkl(hkl: usize) {
             );
         }
     }
-}
-
-/// Cycle the foreground window to the next installed layout; returns the HKL
-/// that was applied.
-pub fn switch_next() -> usize {
-    let list = layout_list();
-    if list.is_empty() {
-        return foreground_hkl();
-    }
-    let cur = foreground_hkl();
-    let next = match list.iter().position(|&h| h == cur) {
-        Some(i) if i + 1 < list.len() => list[i + 1],
-        _ => list[0],
-    };
-    apply_hkl(next);
-    next
 }
 
 // HWND is used only through the calls above; keep the import meaningful.

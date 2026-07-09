@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "KeyboardLangLock",
+  "productName": "WindowsLanguageWidget",
   "version": "1.0.0",
-  "identifier": "com.mykolamoskal.keyboardlanglock",
+  "identifier": "com.mykolamoskal.windowslanguagewidget",
   "build": {
     "frontendDist": "../src"
   },
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "widget",
-        "title": "KeyboardLangLock",
+        "title": "WindowsLanguageWidget",
         "url": "index.html",
         "width": 240,
         "height": 64,

@@ -50,12 +50,6 @@ function applyStatus(lang, locked) {
 }
 
 // ---------- Actions ----------
-langEl.addEventListener("click", async (e) => {
-  e.stopPropagation();
-  const lang = await invoke("switch_layout");
-  langEl.textContent = lang;
-});
-
 lockBtn.addEventListener("click", async (e) => {
   e.stopPropagation();
   const locked = await invoke("toggle_lock");
