@@ -8,7 +8,7 @@ Built with [Tauri](https://tauri.app) (Rust + WebView2), so it stays light on RA
 
 ## Features
 
-- Shows the layout of the **active window** (EN / UK / RU…), not the widget itself
+- Shows the layout of the **active window** (EN / UK …), not the widget itself
 - Lock the layout — a soft snap-back by default, or an optional **hard block** that fully disables the language hotkey while locked, so games never see a switch (see below)
 - `Win+Space` and the taskbar language indicator keep working even while locked — deliberate switches stay possible
 - Pin the widget's position (drag it by the pill or the language label when unpinned)
