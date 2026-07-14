@@ -4,16 +4,21 @@ A lightweight Windows 11 desktop widget that shows the active window's keyboard 
 
 Built with [Tauri](https://tauri.app) (Rust + WebView2), so it stays light on RAM (~50 MB).
 
+![WindowsLanguageWidget — the widget and its settings panel](src-tauri/icons/screenshot_1.png)
+
 ## Features
 
 - Shows the layout of the **active window** (EN / UK / RU…), not the widget itself
-- Lock the layout — while locked, `Alt+Shift` / `Ctrl+Shift` **don't switch the layout at all** (blocked at the keyboard-hook level, so games never see a language change), and anything that slips through another way is snapped back
+- Lock the layout — a soft snap-back by default, or an optional **hard block** that fully disables the language hotkey while locked, so games never see a switch (see below)
 - `Win+Space` and the taskbar language indicator keep working even while locked — deliberate switches stay possible
-- Pin the widget's position (drag it when unpinned)
+- Pin the widget's position (drag it by the pill or the language label when unpinned)
 - Five built-in themes, or write your own CSS
 - Show/hide the lock, pin, and settings buttons independently
 - Autostart with Windows, toggled right from the settings panel
+- Ukrainian / English interface
 - One-click reset back to defaults
+- Single-instance: launching a second copy just surfaces the running one
+- Checks GitHub for a newer release and links to it from Settings
 - Settings persist across restarts
 
 ## Install
@@ -39,9 +44,8 @@ The WebView2 runtime it needs ships with Windows 11 by default.
 | Size / Opacity / Corner radius | Fine-tune the widget's appearance |
 | Background color | Pick a preset swatch or enter a hex value |
 | Always on top | Keep the widget above other windows |
-| Start with Windows | Autostart on login |
-| Block layout hotkeys while locked | Tries to break the `Alt+Shift` / `Ctrl+Shift` combos at the keyboard-hook level while locked. The keys themselves still reach your game. `Win+Space` is never blocked. |
-| Disable system hotkey while locked | **Experimental.** The most reliable block: while locked, the Windows language hotkey is turned off entirely (registry + `SPI_SETLANGTOGGLE`), so no switch event ever fires and games never see a language change. Off by default — see below before enabling. |
+| Start with Windows | Autostart on login (kept in sync with the tray menu) |
+| Hard-block layout switch while locked | **Experimental, off by default.** While locked, fully disables the Windows language hotkey (keyboard hook + registry `HKCU\Keyboard Layout\Toggle` + `SPI_SETLANGTOGGLE`), so `Alt+Shift` / `Ctrl+Shift` never fire a switch and games never see a language change. `Win+Space` still works. See below before enabling. |
 | Visible buttons | Show/hide the lock, pin, and settings buttons independently |
 | Custom CSS | Advanced styling, see below |
 | Reset to defaults | Restores appearance settings; keeps the widget's position and current lock state |
@@ -74,11 +78,11 @@ Example — bigger, green language text:
 #lang { color: #00ff88; font-size: 1.2em; }
 ```
 
-### "Disable system hotkey while locked" — what it does
+### "Hard-block layout switch while locked" — what it does
 
-When enabled, locking the layout temporarily sets `HKCU\Keyboard Layout\Toggle` to "no hotkey" and applies it instantly via `SystemParametersInfoW(SPI_SETLANGTOGGLE)`. While locked, `Alt+Shift` / `Ctrl+Shift` are ordinary keys to Windows — there is no layout-switch event at all, which is the only approach some games respect. `Win+Space` and the taskbar language indicator keep working.
+By default, locking only snaps the layout back after a switch — which some games notice as a brief change. Enable this option for a true block: while locked it disables the Windows language hotkey on two levels — a low-level keyboard hook, plus temporarily setting `HKCU\Keyboard Layout\Toggle` to "no hotkey" and applying it instantly via `SystemParametersInfoW(SPI_SETLANGTOGGLE)`. `Alt+Shift` / `Ctrl+Shift` become ordinary keys to Windows — there is no layout-switch event at all, which is the only approach some games respect. `Win+Space` and the taskbar language indicator keep working.
 
-Your original values are restored automatically on: unlock, app exit, the app's next launch (crash-recovery backup), and — worst case — the next Windows logon (a `RunOnce` restore entry is registered while the hotkey is disabled).
+It's off by default because it writes to the registry. Your original values are restored automatically on: unlock, app exit, the app's next launch (crash-recovery backup), and — worst case — the next Windows logon (a `RunOnce` restore entry is registered while the hotkey is disabled).
 
 **Manual recovery**, if the hotkey ever stays off (e.g. hard power loss and you never launch the widget again): Windows Settings → *Time & language* → *Typing* → *Advanced keyboard settings* → *Input language hot keys*, and set the key sequence back — or delete the `Language Hotkey`, `Layout Hotkey`, and `Hotkey` values under `HKCU\Keyboard Layout\Toggle` and sign out/in.
 

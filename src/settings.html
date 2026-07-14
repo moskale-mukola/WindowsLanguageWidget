@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KeyboardLangLock Settings</title>
+  <title>WindowsLanguageWidget Settings</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root {
@@ -54,8 +54,15 @@
     }
     button:hover { border-color: var(--accent); }
     #resetBtn { color: var(--accent); }
+    .btn-row { display: flex; gap: 8px; margin-top: 10px; }
+    .btn-row button { flex: 1; }
+    #exitBtn { color: #e06c6c; }
 
     .hint { color: var(--muted); font-size: 12px; margin-top: 14px; line-height: 1.5; border-top: 1px solid var(--line); padding-top: 12px; }
+    .footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; font-size: 11px; }
+    .footer .ver { color: var(--muted); }
+    .footer a { color: var(--accent); text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
     .warn { color: #e6a23c; font-size: 11px; line-height: 1.5; margin: 2px 0 10px; }
     .warn code { font-family: Consolas, monospace; font-size: 10px; }
   </style>
@@ -117,19 +124,16 @@
   </div>
 
   <div class="toggle-row">
-    <span data-i18n="block_hotkeys" title="While locked, Alt+Shift / Ctrl+Shift won't switch the layout at all. Win+Space and the taskbar indicator still work.">Block layout hotkeys while locked</span>
+    <span data-i18n="block_hotkeys">Hard-block layout switch while locked</span>
     <input type="checkbox" id="blockHotkeys" />
   </div>
-
-  <div class="toggle-row">
-    <span data-i18n="registry_block">Disable system hotkey while locked</span>
-    <input type="checkbox" id="registryBlock" />
-  </div>
-  <div class="warn" data-i18n="registry_warn">
-    ⚠ Experimental. Temporarily edits the Windows registry (<code>HKCU\Keyboard Layout\Toggle</code>) while
-    locked — the most reliable block for games. Your original values are restored on unlock, exit, and next
-    launch/logon after a crash. If Alt+Shift ever stays off: Settings → Time &amp; language → Typing →
-    Advanced keyboard settings → Input language hot keys.
+  <div class="warn" data-i18n="block_hotkeys_warn">
+    ⚠ Experimental. While locked, this fully disables the Windows language hotkey — via a keyboard hook and by
+    temporarily editing the registry (<code>HKCU\Keyboard Layout\Toggle</code> + <code>SPI_SETLANGTOGGLE</code>) —
+    so <code>Alt+Shift</code> / <code>Ctrl+Shift</code> never fire a switch and games never see a language change.
+    <code>Win+Space</code> and the taskbar indicator keep working. Your original settings are restored on unlock,
+    exit, and the next launch/logon after a crash. If the hotkey ever stays off: Settings → Time &amp; language →
+    Typing → Advanced keyboard settings → Input language hot keys.
   </div>
 
   <h1 style="margin-top: 24px;" data-i18n="h_buttons">Visible buttons</h1>
@@ -156,7 +160,17 @@
     <button id="resetBtn" data-i18n="reset">Reset to defaults</button>
   </div>
 
+  <div class="btn-row">
+    <button id="checkUpdate" data-i18n="check_update">Check for updates</button>
+    <button id="exitBtn" data-i18n="exit">Exit app</button>
+  </div>
+
   <div class="hint" data-i18n="hint">Changes apply instantly. Right-click the widget to open settings.</div>
+
+  <div class="footer">
+    <span id="version" class="ver"></span>
+    <span id="updateStatus"></span>
+  </div>
 
   <script src="i18n.js"></script>
   <script src="settings.js"></script>

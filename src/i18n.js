@@ -14,12 +14,14 @@ const I18N = {
     bg_color: "Background color",
     aot: "Always on top",
     autostart: "Start with Windows",
-    block_hotkeys: "Block layout hotkeys while locked",
-    registry_block: "Disable system hotkey while locked",
-    registry_warn: `⚠ Experimental. Temporarily edits the Windows registry (<code>HKCU\\Keyboard Layout\\Toggle</code>) while
-    locked — the most reliable block for games. Your original values are restored on unlock, exit, and next
-    launch/logon after a crash. If Alt+Shift ever stays off: Settings → Time &amp; language → Typing →
-    Advanced keyboard settings → Input language hot keys.`,
+    block_hotkeys: "Hard-block layout switch while locked",
+    block_hotkeys_warn: `⚠ Experimental. While locked, this fully disables the Windows language hotkey — via a
+    keyboard hook and by temporarily editing the registry (<code>HKCU\\Keyboard Layout\\Toggle</code> +
+    <code>SPI_SETLANGTOGGLE</code>) — so <code>Alt+Shift</code> / <code>Ctrl+Shift</code> never fire a switch and
+    games never see a language change. <code>Win+Space</code> and the taskbar indicator keep working. Your
+    original settings are restored on unlock, exit, and the next launch/logon after a crash. If the hotkey ever
+    stays off: Settings → Time &amp; language → Typing → Advanced keyboard settings → Input language hot keys.`,
+    update_available: "Update available:",
     h_buttons: "Visible buttons",
     btn_lock: "Lock button",
     btn_pin: "Pin button",
@@ -28,6 +30,11 @@ const I18N = {
     css_label: "Advanced styling",
     css_placeholder: "/* e.g. #card { font-family: monospace; } */",
     reset: "Reset to defaults",
+    check_update: "Check for updates",
+    exit: "Exit app",
+    checking: "Checking…",
+    up_to_date: "Up to date",
+    update_failed: "Check failed",
     hint: "Changes apply instantly. Right-click the widget to open settings.",
   },
   uk: {
@@ -45,12 +52,14 @@ const I18N = {
     bg_color: "Колір фону",
     aot: "Поверх усіх вікон",
     autostart: "Запускати з Windows",
-    block_hotkeys: "Блокувати гарячі клавіші під час блокування",
-    registry_block: "Вимикати системну гарячу клавішу під час блокування",
-    registry_warn: `⚠ Експериментально. Тимчасово змінює реєстр Windows (<code>HKCU\\Keyboard Layout\\Toggle</code>)
-    під час блокування — найнадійніший спосіб для ігор. Оригінальні значення відновлюються при розблокуванні,
-    закритті та наступному запуску після збою. Якщо Alt+Shift перестане перемикати мову: Параметри → Час і мова →
-    Введення тексту → Додаткові параметри клавіатури → Комбінації клавіш для мов введення.`,
+    block_hotkeys: "Жорстке блокування зміни мови під час блокування",
+    block_hotkeys_warn: `⚠ Експериментально. Під час блокування повністю вимикає системну гарячу клавішу мови —
+    через клавіатурний хук і тимчасову зміну реєстру (<code>HKCU\\Keyboard Layout\\Toggle</code> +
+    <code>SPI_SETLANGTOGGLE</code>) — тому <code>Alt+Shift</code> / <code>Ctrl+Shift</code> взагалі не перемикають
+    мову, і гра не бачить зміни. <code>Win+Space</code> і індикатор на панелі задач працюють. Оригінальні
+    значення відновлюються при розблокуванні, закритті та наступному запуску після збою. Якщо клавіша лишиться
+    вимкненою: Параметри → Час і мова → Введення тексту → Додаткові параметри клавіатури → Комбінації клавіш.`,
+    update_available: "Доступне оновлення:",
     h_buttons: "Видимі кнопки",
     btn_lock: "Кнопка блокування",
     btn_pin: "Кнопка закріплення",
@@ -59,6 +68,11 @@ const I18N = {
     css_label: "Розширене стилізування",
     css_placeholder: "/* напр. #card { font-family: monospace; } */",
     reset: "Скинути до типових",
+    check_update: "Перевірити оновлення",
+    exit: "Вийти з додатку",
+    checking: "Перевірка…",
+    up_to_date: "Найновіша версія",
+    update_failed: "Не вдалося перевірити",
     hint: "Зміни застосовуються миттєво. ПКМ по віджету відкриває налаштування.",
   },
 };

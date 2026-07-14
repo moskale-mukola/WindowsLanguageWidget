@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>KeyboardLangLock</title>
+  <title>WindowsLanguageWidget</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -129,8 +129,8 @@
 <body>
   <div class="card" id="card" data-tauri-drag-region>
     <!-- Single row: language | lock | (pin above settings) -->
-    <div class="main">
-      <div class="lang" id="lang">EN</div>
+    <div class="main" data-tauri-drag-region>
+      <div class="lang" id="lang" data-tauri-drag-region>EN</div>
 
       <div class="btn lock-btn" id="lock" title="Lock layout">
         <svg class="lock-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

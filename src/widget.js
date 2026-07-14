@@ -48,9 +48,15 @@ function fitWindow() {
   invoke("resize_widget", { width: w, height: h });
 }
 
+// Drag works on the card *and* the language label / main row (buttons are
+// excluded so their clicks still register). Pinning disables dragging on all.
+const DRAG_ELS = [card, langEl, document.querySelector(".main")];
 function updateDragRegion(pinned) {
-  if (pinned) card.removeAttribute("data-tauri-drag-region");
-  else card.setAttribute("data-tauri-drag-region", "");
+  DRAG_ELS.forEach((el) => {
+    if (!el) return;
+    if (pinned) el.removeAttribute("data-tauri-drag-region");
+    else el.setAttribute("data-tauri-drag-region", "");
+  });
 }
 
 // ---------- Status ----------

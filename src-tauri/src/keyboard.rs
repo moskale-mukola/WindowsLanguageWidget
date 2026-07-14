@@ -18,14 +18,26 @@ use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
 use windows::Win32::Globalization::{GetLocaleInfoW, LOCALE_SISO639LANGNAME};
 use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyboardLayout;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, PostMessageW, GUITHREADINFO,
-    WM_INPUTLANGCHANGEREQUEST,
+    GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, PostMessageW,
+    SetForegroundWindow, GUITHREADINFO, WM_INPUTLANGCHANGEREQUEST,
 };
 
 /// Raw foreground window handle, as an integer (0 if none). Callers should
 /// check this against their own windows before treating it as "the app".
 pub fn foreground_hwnd_raw() -> isize {
     unsafe { GetForegroundWindow().0 as isize }
+}
+
+/// Hand the foreground back to a given window. Used to bounce focus off our
+/// own widget the instant WebView2 grabs it on a click, so the game/app stays
+/// the foreground window and keeps receiving the keyboard.
+pub fn set_foreground(hwnd_val: isize) {
+    if hwnd_val == 0 {
+        return;
+    }
+    unsafe {
+        let _ = SetForegroundWindow(HWND(hwnd_val as *mut _));
+    }
 }
 
 /// HKL of the given window's thread (0 if the handle is null).

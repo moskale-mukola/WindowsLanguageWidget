@@ -16,22 +16,49 @@
 //! Win+Space and switching from the taskbar language indicator are
 //! intentionally left alone — those are deliberate actions, not accidents.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
 
-use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HMODULE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
     VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage, HHOOK,
-    KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_SYSKEYDOWN,
+    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW, SetWindowsHookExW,
+    TranslateMessage, EVENT_SYSTEM_FOREGROUND, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG,
+    WH_KEYBOARD_LL, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_KEYDOWN, WM_SYSKEYDOWN,
 };
 
 /// Set by the enforcement loop: true while (layout locked && blocking
 /// enabled in settings). The hook itself stays installed permanently and
 /// is a no-op when this is false.
 pub static BLOCK_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// The most recent *external* foreground window (as an isize HWND). Kept up
+/// to date by a WINEVENT_SKIPOWNPROCESS foreground hook, so our own windows
+/// (widget/settings) never overwrite it — the widget therefore always tracks
+/// the real active app, even when it briefly holds focus itself. 0 until the
+/// first foreground event or the install-time seed.
+pub static LAST_FOREGROUND: AtomicIsize = AtomicIsize::new(0);
+
+pub fn last_foreground() -> isize {
+    LAST_FOREGROUND.load(Ordering::Relaxed)
+}
+
+unsafe extern "system" fn winevent_proc(
+    _hook: HWINEVENTHOOK,
+    event: u32,
+    hwnd: HWND,
+    _id_object: i32,
+    _id_child: i32,
+    _thread: u32,
+    _time: u32,
+) {
+    if event == EVENT_SYSTEM_FOREGROUND && !hwnd.0.is_null() {
+        LAST_FOREGROUND.store(hwnd.0 as isize, Ordering::Relaxed);
+    }
+}
 
 const VK_DUMMY: u16 = 0xE8; // unassigned VK — apps ignore it (0xFF gets filtered by some input paths)
 
@@ -80,18 +107,38 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     CallNextHookEx(HHOOK::default(), code, wparam, lparam)
 }
 
-/// Install the hook on a dedicated thread with a message loop (required
-/// for WH_KEYBOARD_LL callbacks to be delivered).
+/// Install both hooks on a dedicated thread with a message loop (required
+/// for WH_KEYBOARD_LL callbacks and for OUTOFCONTEXT WinEvents to be
+/// delivered).
 pub fn install() {
     std::thread::spawn(|| unsafe {
-        if SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook_proc), HINSTANCE::default(), 0).is_ok() {
-            let mut msg = MSG::default();
-            while GetMessageW(&mut msg, windows::Win32::Foundation::HWND::default(), 0, 0)
-                .as_bool()
-            {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
+        let _kb = SetWindowsHookExW(WH_KEYBOARD_LL, Some(hook_proc), HINSTANCE::default(), 0);
+
+        // Seed with whatever is foreground right now, but only if main()
+        // didn't already capture the real pre-launch foreground (by now our
+        // widget may have grabbed focus, so we'd rather not overwrite a good
+        // value with our own window). SKIPOWNPROCESS keeps our windows from
+        // ever registering as the "active app" thereafter.
+        if LAST_FOREGROUND.load(Ordering::Relaxed) == 0 {
+            let fg = GetForegroundWindow();
+            if !fg.0.is_null() {
+                LAST_FOREGROUND.store(fg.0 as isize, Ordering::Relaxed);
             }
+        }
+        let _we = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            HMODULE::default(),
+            Some(winevent_proc),
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+        );
+
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, HWND::default(), 0, 0).as_bool() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
     });
 }

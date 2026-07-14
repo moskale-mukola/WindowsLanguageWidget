@@ -1,5 +1,5 @@
 const { invoke } = window.__TAURI__.core;
-const { emit } = window.__TAURI__.event;
+const { emit, listen } = window.__TAURI__.event;
 
 const PRESETS = ["1E1E1E", "000000", "2D2D30", "0F0F0F", "1A1A2E", "16213E", "0D1117", "3C3C3C"];
 
@@ -28,12 +28,13 @@ const els = {
   aot: document.getElementById("aot"),
   autostart: document.getElementById("autostart"),
   blockHotkeys: document.getElementById("blockHotkeys"),
-  registryBlock: document.getElementById("registryBlock"),
   showLock: document.getElementById("showLock"),
   showPin: document.getElementById("showPin"),
   showSettings: document.getElementById("showSettings"),
   customCss: document.getElementById("customCss"),
   resetBtn: document.getElementById("resetBtn"),
+  checkUpdate: document.getElementById("checkUpdate"),
+  exitBtn: document.getElementById("exitBtn"),
 };
 
 let settings = null;
@@ -88,8 +89,7 @@ function populateUI() {
   els.colorPicker.value = "#" + settings.bg_color;
   markActiveSwatch(settings.bg_color);
   els.aot.checked = settings.always_on_top;
-  els.blockHotkeys.checked = settings.block_hotkeys !== false;
-  els.registryBlock.checked = settings.registry_block === true;
+  els.blockHotkeys.checked = settings.block_hotkeys === true;
   els.showLock.checked = settings.show_lock !== false;
   els.showPin.checked = settings.show_pin !== false;
   els.showSettings.checked = settings.show_settings !== false;
@@ -151,11 +151,6 @@ els.blockHotkeys.addEventListener("change", () => {
   apply();
 });
 
-els.registryBlock.addEventListener("change", () => {
-  settings.registry_block = els.registryBlock.checked;
-  apply();
-});
-
 els.showLock.addEventListener("change", () => {
   settings.show_lock = els.showLock.checked;
   apply();
@@ -185,6 +180,57 @@ els.resetBtn.addEventListener("click", async () => {
 
 els.uiLang.addEventListener("change", () => setUiLang(els.uiLang.value));
 
+els.checkUpdate.addEventListener("click", () => checkForUpdate(true));
+
+els.exitBtn.addEventListener("click", () => invoke("quit_app"));
+
+// Reflect autostart changes made from the tray menu while this panel is open.
+listen("autostart-changed", (e) => {
+  els.autostart.checked = !!e.payload;
+});
+
+// ---------- Update check ----------
+const REPO = "moskale-mukola/WindowsLanguageWidget";
+
+// Returns >0 if a>b, <0 if a<b, 0 if equal. Compares dot-separated numbers.
+function cmpVersions(a, b) {
+  const pa = a.replace(/^v/, "").split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = b.replace(/^v/, "").split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+let currentVersion = "";
+
+async function checkForUpdate(manual) {
+  const verEl = document.getElementById("version");
+  const statusEl = document.getElementById("updateStatus");
+  const dict = I18N[getUiLang()] || I18N.en;
+  verEl.textContent = "v" + currentVersion;
+  if (manual) statusEl.textContent = dict.checking || "Checking…";
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!res.ok) throw new Error("http " + res.status);
+    const rel = await res.json();
+    const latest = (rel.tag_name || "").replace(/^v/, "");
+    if (latest && cmpVersions(latest, currentVersion) > 0) {
+      const url = rel.html_url || `https://github.com/${REPO}/releases`;
+      const label = (dict.update_available || "Update available:") + " v" + latest;
+      statusEl.innerHTML = `<a href="${url}" target="_blank" rel="noopener">${label}</a>`;
+    } else {
+      statusEl.textContent = manual ? (dict.up_to_date || "Up to date") : "";
+    }
+  } catch (_) {
+    // Offline or rate-limited.
+    statusEl.textContent = manual ? (dict.update_failed || "Check failed") : "";
+  }
+}
+
 // ---------- Init ----------
 (async () => {
   const lang = getUiLang();
@@ -194,4 +240,8 @@ els.uiLang.addEventListener("change", () => setUiLang(els.uiLang.value));
   settings = await invoke("get_settings");
   populateUI();
   els.autostart.checked = await invoke("get_autostart");
+  try {
+    currentVersion = await window.__TAURI__.app.getVersion();
+    checkForUpdate(false);
+  } catch (_) {}
 })();

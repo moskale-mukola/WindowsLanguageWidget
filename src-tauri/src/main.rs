@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Emitter, LogicalSize, Manager, State, WindowEvent};
+use tauri::{AppHandle, Emitter, LogicalSize, Manager, State, WindowEvent, Wry};
 use tauri_plugin_autostart::ManagerExt;
 
 // ---------- Shared runtime state (used by the enforcement thread) ----------
@@ -28,11 +28,15 @@ struct Lock {
     last_external_hwnd: isize,
     // Our own window handles, excluded when picking "the target app".
     own_hwnds: Vec<isize>,
-    // Mirrors of the corresponding Settings fields, kept here so the
+    // The widget window specifically. If it ever becomes the foreground
+    // window (WebView2 grabs focus on click), we bounce focus straight back
+    // to last_external_hwnd so the game keeps the keyboard.
+    widget_hwnd: isize,
+    // Mirror of the corresponding Settings field, kept here so the
     // enforcement loop can sync the blocking layers without re-reading
-    // the settings file.
+    // the settings file. Drives both the keyboard hook and the
+    // registry-level hotkey disable.
     block_hotkeys: bool,
-    registry_block: bool,
 }
 
 impl Default for Lock {
@@ -43,14 +47,17 @@ impl Default for Lock {
             last_enforce: Instant::now(),
             last_external_hwnd: 0,
             own_hwnds: Vec::new(),
-            block_hotkeys: true,
-            registry_block: false,
+            widget_hwnd: 0,
+            block_hotkeys: false,
         }
     }
 }
 
 struct AppState {
     lock: Mutex<Lock>,
+    // The tray's "Autostart" check item, so the settings panel and the tray
+    // menu stay in sync when either one toggles autostart.
+    autostart_item: Mutex<Option<CheckMenuItem<Wry>>>,
 }
 
 // ---------- Persisted settings ----------
@@ -71,15 +78,14 @@ struct Settings {
     show_settings: bool,
     theme: String,
     custom_css: String,
-    // While locked, break the Alt+Shift / Ctrl+Shift hotkeys at the
-    // keyboard-hook level so the layout never switches in the first place
-    // (Win+Space and the taskbar indicator still work).
+    // Experimental single "hard block" switch. While locked it engages
+    // BOTH blocking layers: the keyboard hook (breaks Alt+Shift /
+    // Ctrl+Shift before the switch fires) and the registry-level disable
+    // (HKCU\Keyboard Layout\Toggle + SPI_SETLANGTOGGLE — the reliable one
+    // that games respect). Off by default because it writes to the
+    // registry; guarded by a backup file and a RunOnce restore entry.
+    // Win+Space and the taskbar indicator keep working either way.
     block_hotkeys: bool,
-    // Experimental: while locked, disable the system language hotkey via
-    // the registry (HKCU\Keyboard Layout\Toggle + SPI_SETLANGTOGGLE).
-    // The most reliable block, but it writes to the registry — off by
-    // default; guarded by a backup file and a RunOnce restore entry.
-    registry_block: bool,
 }
 
 impl Default for Settings {
@@ -99,8 +105,7 @@ impl Default for Settings {
             show_settings: true,
             theme: "default".into(),
             custom_css: String::new(),
-            block_hotkeys: true,
-            registry_block: false,
+            block_hotkeys: false,
         }
     }
 }
@@ -121,12 +126,17 @@ fn load_settings(app: &AppHandle) -> Settings {
     }
 }
 
-/// Current external (non-own) foreground HWND + its keyboard layout. Reads
-/// GetForegroundWindow() fresh, but falls back to the last known external
-/// window if the current foreground is one of our own (widget/settings).
+/// Current external (non-own) foreground HWND + its keyboard layout.
+/// Prefers the WinEvent-tracked foreground (updated system-wide, skips our
+/// own process) so we always follow the real active window even when the
+/// widget briefly grabs focus. Falls back to a fresh GetForegroundWindow(),
+/// then to the last known external window.
 fn current_external(s: &mut Lock) -> (isize, usize) {
+    let tracked = hook::last_foreground();
     let raw = keyboard::foreground_hwnd_raw();
-    if raw != 0 && !s.own_hwnds.contains(&raw) {
+    if tracked != 0 && !s.own_hwnds.contains(&tracked) {
+        s.last_external_hwnd = tracked;
+    } else if raw != 0 && !s.own_hwnds.contains(&raw) {
         s.last_external_hwnd = raw;
     }
     let hwnd = s.last_external_hwnd;
@@ -144,7 +154,6 @@ fn save_settings(app: AppHandle, state: State<'_, Arc<AppState>>, settings: Sett
     {
         let mut s = state.lock.lock().unwrap();
         s.block_hotkeys = settings.block_hotkeys;
-        s.registry_block = settings.registry_block;
     }
     if let Ok(txt) = serde_json::to_string_pretty(&settings) {
         let _ = std::fs::write(settings_path(&app), txt);
@@ -168,7 +177,6 @@ fn reset_settings(app: AppHandle, state: State<'_, Arc<AppState>>) -> Settings {
     {
         let mut s = state.lock.lock().unwrap();
         s.block_hotkeys = merged.block_hotkeys;
-        s.registry_block = merged.registry_block;
     }
     if let Ok(txt) = serde_json::to_string_pretty(&merged) {
         let _ = std::fs::write(settings_path(&app), txt);
@@ -182,12 +190,16 @@ fn get_autostart(app: AppHandle) -> bool {
 }
 
 #[tauri::command]
-fn set_autostart(app: AppHandle, enabled: bool) {
+fn set_autostart(app: AppHandle, state: State<'_, Arc<AppState>>, enabled: bool) {
     let mgr = app.autolaunch();
     if enabled {
         let _ = mgr.enable();
     } else {
         let _ = mgr.disable();
+    }
+    // Keep the tray menu's check item in sync with the settings panel.
+    if let Some(item) = state.autostart_item.lock().unwrap().as_ref() {
+        let _ = item.set_checked(enabled);
     }
 }
 
@@ -210,8 +222,9 @@ fn toggle_lock(state: State<'_, Arc<AppState>>) -> bool {
         let (_, hkl) = current_external(&mut s);
         s.target = hkl;
     }
-    hook::BLOCK_ACTIVE.store(s.layout_locked && s.block_hotkeys, Ordering::Relaxed);
-    toggle::set_blocked(s.layout_locked && s.registry_block);
+    let hard_block = s.layout_locked && s.block_hotkeys;
+    hook::BLOCK_ACTIVE.store(hard_block, Ordering::Relaxed);
+    toggle::set_blocked(hard_block);
     s.layout_locked
 }
 
@@ -246,11 +259,58 @@ fn show_settings_window(app: &AppHandle) {
     }
 }
 
-// Keep the widget from stealing focus when clicked (WS_EX_NOACTIVATE), so
-// GetForegroundWindow keeps pointing at the game/app, not our widget.
+// Native "already running" notice, shown when a second instance is launched.
+#[cfg(windows)]
+fn notify_already_running() {
+    use windows::core::PCWSTR;
+    use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
+    let text: Vec<u16> = "WindowsLanguageWidget is already running.\0"
+        .encode_utf16()
+        .collect();
+    let title: Vec<u16> = "WindowsLanguageWidget\0".encode_utf16().collect();
+    unsafe {
+        MessageBoxW(
+            None,
+            PCWSTR(text.as_ptr()),
+            PCWSTR(title.as_ptr()),
+            MB_OK | MB_ICONINFORMATION,
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn notify_already_running() {}
+
+// Subclass proc that refuses activation on mouse clicks. Combined with
+// WS_EX_NOACTIVATE this guarantees clicking anywhere on the widget (including
+// the WebView2 client area, which otherwise grabs focus) never pulls the
+// foreground away from the game — so the layout indicator keeps tracking the
+// real active window in real time.
+#[cfg(windows)]
+unsafe extern "system" fn noactivate_subclass(
+    hwnd: windows::Win32::Foundation::HWND,
+    msg: u32,
+    wparam: windows::Win32::Foundation::WPARAM,
+    lparam: windows::Win32::Foundation::LPARAM,
+    _uid: usize,
+    _data: usize,
+) -> windows::Win32::Foundation::LRESULT {
+    use windows::Win32::Foundation::LRESULT;
+    use windows::Win32::UI::Shell::DefSubclassProc;
+    use windows::Win32::UI::WindowsAndMessaging::{MA_NOACTIVATE, WM_MOUSEACTIVATE};
+    if msg == WM_MOUSEACTIVATE {
+        return LRESULT(MA_NOACTIVATE as isize);
+    }
+    DefSubclassProc(hwnd, msg, wparam, lparam)
+}
+
+// Keep the widget from stealing focus when clicked (WS_EX_NOACTIVATE +
+// WM_MOUSEACTIVATE subclass), so GetForegroundWindow keeps pointing at the
+// game/app, not our widget.
 #[cfg(windows)]
 fn make_noactivate(app: &AppHandle) {
     use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::Shell::SetWindowSubclass;
     use windows::Win32::UI::WindowsAndMessaging::{
         GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_NOACTIVATE,
     };
@@ -260,17 +320,37 @@ fn make_noactivate(app: &AppHandle) {
             unsafe {
                 let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
                 SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE.0 as isize);
+                let _ = SetWindowSubclass(hwnd, Some(noactivate_subclass), 1, 0);
             }
         }
     }
 }
 
 fn main() {
+    // Capture the active window before any of our own windows exist, so we
+    // know the real foreground app even if the widget grabs focus on its
+    // first paint. The bounce/tracking below relies on this being seeded.
+    let initial_fg = keyboard::foreground_hwnd_raw();
+    if initial_fg != 0 {
+        hook::LAST_FOREGROUND.store(initial_fg, Ordering::Relaxed);
+    }
+
     let state = Arc::new(AppState {
         lock: Mutex::new(Lock::default()),
+        autostart_item: Mutex::new(None),
     });
 
     tauri::Builder::default()
+        // Single-instance guard MUST be the first plugin registered. When a
+        // second copy is launched it hands off to the running one (which
+        // surfaces the widget + a notice) and the new process exits.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("widget") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+            notify_already_running();
+        }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -305,9 +385,11 @@ fn main() {
             // mistakes the widget or settings panel for "the target app".
             {
                 let mut own = Vec::new();
+                let mut widget_hwnd = 0isize;
                 if let Some(w) = app.get_webview_window("widget") {
                     if let Ok(h) = w.hwnd() {
-                        own.push(h.0 as isize);
+                        widget_hwnd = h.0 as isize;
+                        own.push(widget_hwnd);
                     }
                 }
                 if let Some(w) = app.get_webview_window("settings") {
@@ -317,6 +399,7 @@ fn main() {
                 }
                 let mut s = state.lock.lock().unwrap();
                 s.own_hwnds = own;
+                s.widget_hwnd = widget_hwnd;
             }
 
             // Restore persisted lock state + position/always-on-top.
@@ -325,7 +408,6 @@ fn main() {
                 let mut s = state.lock.lock().unwrap();
                 s.layout_locked = settings.layout_locked;
                 s.block_hotkeys = settings.block_hotkeys;
-                s.registry_block = settings.registry_block;
                 if s.layout_locked {
                     let (_, hkl) = current_external(&mut s);
                     s.target = hkl;
@@ -372,6 +454,11 @@ fn main() {
             let quit_i = MenuItem::with_id(app, "quit", "Exit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&settings_i, &autostart_i, &sep, &quit_i])?;
 
+            // Share the check item with the settings panel (via AppState) and
+            // with the tray click handler, so all three stay in sync.
+            *state.autostart_item.lock().unwrap() = Some(autostart_i.clone());
+            let autostart_tray = autostart_i.clone();
+
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("WindowsLanguageWidget")
@@ -381,11 +468,15 @@ fn main() {
                     "quit" => app.exit(0),
                     "autostart" => {
                         let mgr = app.autolaunch();
-                        if mgr.is_enabled().unwrap_or(false) {
-                            let _ = mgr.disable();
-                        } else {
+                        let enabled = !mgr.is_enabled().unwrap_or(false);
+                        if enabled {
                             let _ = mgr.enable();
+                        } else {
+                            let _ = mgr.disable();
                         }
+                        let _ = autostart_tray.set_checked(enabled);
+                        // Sync the settings panel's checkbox if it's open.
+                        let _ = app.emit_to("settings", "autostart-changed", enabled);
                     }
                     _ => {}
                 })
@@ -407,13 +498,24 @@ fn main() {
                 loop {
                     let (hwnd, cur_hkl, locked, target, should_enforce) = {
                         let mut s = st.lock.lock().unwrap();
+                        // If our widget stole the foreground (WebView2 does this
+                        // on click, even with WS_EX_NOACTIVATE), hand it right
+                        // back to the last real app so the game keeps the
+                        // keyboard and the indicator keeps tracking it live.
+                        let fg = keyboard::foreground_hwnd_raw();
+                        if fg == s.widget_hwnd
+                            && s.last_external_hwnd != 0
+                            && s.last_external_hwnd != s.widget_hwnd
+                        {
+                            keyboard::set_foreground(s.last_external_hwnd);
+                        }
                         let (hwnd, cur_hkl) = current_external(&mut s);
                         let can_enforce = s.last_enforce.elapsed() > Duration::from_millis(100);
                         let should = can_enforce && s.layout_locked && s.target != 0;
                         // Keep both blocking layers in sync with lock state.
-                        hook::BLOCK_ACTIVE
-                            .store(s.layout_locked && s.block_hotkeys, Ordering::Relaxed);
-                        toggle::set_blocked(s.layout_locked && s.registry_block);
+                        let hard_block = s.layout_locked && s.block_hotkeys;
+                        hook::BLOCK_ACTIVE.store(hard_block, Ordering::Relaxed);
+                        toggle::set_blocked(hard_block);
                         (hwnd, cur_hkl, s.layout_locked, s.target, should)
                     };
 
